@@ -1,19 +1,18 @@
 //CONFIG
-var BOT_TOKEN = "6642440655:AADRAWN3nXcuJf5xJkSQLhyJgQXGag08cLc" //BOT TOKEN ANDA
-var SS_URL = "https://docs.google.com/spreadsheets/d/1LArhvsBXZ8lJ3tzvx8DyYrFWwtRxlQsWQEFzdsyignw/edit#gid=0" //URL SPREADSHEET
-var CREDIT_SHEET_NAME = "Pemasukan" //NAMA SHEET PEMASUKAN
-var DEBIT_SHEET_NAME = "Pengeluaran" //NAMA SHEET PENGELUARAN
-
+var BOT_TOKEN = "YOUR_BOT_TOKEN_HERE" //BOT TOKEN ANDA
+var SS_URL = "YOUR_GOOGLE_SHEET_URL_HERE" //URL SPREADSHEET
+var TRADES_SHEET_NAME = "Trades" //NAMA SHEET TRADES
+var PERFORMANCE_SHEET_NAME = "Performance" //NAMA SHEET PERFORMANCE
 
 //BEGIN
 const ss = SpreadsheetApp.openByUrl(SS_URL);
-const creditSheet = ss.getSheetByName(CREDIT_SHEET_NAME);
-const debitSheet = ss.getSheetByName(DEBIT_SHEET_NAME);
-const Credit = new Collection.Collect(creditSheet)
-const Debit = new Collection.Collect(debitSheet)
+const tradesSheet = ss.getSheetByName(TRADES_SHEET_NAME);
+const performanceSheet = ss.getSheetByName(PERFORMANCE_SHEET_NAME);
+const Trades = new Collection.Collect(tradesSheet)
+const Performance = new Collection.Collect(performanceSheet)
 
 function doGet(e) {
-  return HtmlService.createHtmlOutput('<h1>OK</h1>')
+  return HtmlService.createHtmlOutput('<h1>Trading Journal Bot Active</h1>')
 }
 
 function doPost(e) {
@@ -34,176 +33,155 @@ function doPost(e) {
 }
 
 function commands(update, validUsers) {
-
   const chatId = update.message.chat.id;
   const first_name = update.message.chat.first_name;
   const text = update.message.text || '';
-  const tanggal = new Date().toLocaleString();
+  const timestamp = new Date().toLocaleString();
   const _date = new Date().toJSON()
 
   if (validUsers.includes(String(chatId))) {
-
     if (text.startsWith("/start")) {
       sendMessage({
         chat_id: chatId,
-        text: "Mulai laporan keuangan.\nPemasukan:\n/masuk [nominal] [#kategori] [item1, item2 dst]\nPengeluaran:\n/keluar [nominal] [#kategori] [item1, item2 dst]\n\nRekapitulasi: /rekap [tanggal/bulan] [tanggal/bulan (opsional)]\nTanggal dan bulan berformat YYYY-MM-DD dan YYYY-MM\nContoh: \n/rekap 2024-01-01\n/rekap 2024-01-01 2024-01-10\n/rekap 2024-01\n/rekap 2024-01 2024-06"
+        text: "Welcome to your Trading Journal Bot.\n\nCommands:\n/trade [symbol] [direction] [entry] [exit] [size] [pnl] [notes]\n/performance [timeframe]\n/stats\n/help"
       })
-    } else if (text.startsWith("/masuk")) {
-      const stext = text.split(' ')
-
-      const nominal = Number(stext[1]);
-      const kategori = stext[2].startsWith('#') ? stext[2].replace('#', '') : '';
-
-      stext.splice(0, 3);
-      const item = stext.join(' ')
-
-      if (nominal && kategori && item) {
-
-        Credit.insert(
-          {
-            _date,
-            Tanggal: tanggal,
-            Kategori: kategori,
-            Nominal: nominal,
-            Item: item,
-            ReporterID: chatId,
-            ReporterName: first_name
-          }
-        )
-
-        sendMessage({
-          chat_id: chatId,
-          text: 'Laporan pemasukan sukses.'
-        })
-
-      } else {
-        sendMessage({
-          chat_id: chatId,
-          text: 'Gagal. Pastikan sesuai format. \n/masuk [harga] [#kategori] [item1, item2 dst]'
-        })
-      }
-    } else if (text.startsWith("/keluar")) {
-      const stext = text.split(' ')
-
-      const nominal = Number(stext[1]);
-      const kategori = stext[2].startsWith('#') ? stext[2].replace('#', '') : '';
-
-      stext.splice(0, 3);
-      const item = stext.join(' ')
-
-      if (nominal && kategori && item) {
-
-        Debit.insert(
-          {
-            _date,
-            Tanggal: tanggal,
-            Kategori: kategori,
-            Nominal: nominal,
-            Item: item,
-            ReporterID: chatId,
-            ReporterName: first_name
-          }
-        )
-
-        sendMessage({
-          chat_id: chatId,
-          text: 'Laporan pengeluaran sukses.'
-        })
-
-      } else {
-        sendMessage({
-          chat_id: chatId,
-          text: 'Gagal. Pastikan sesuai format. \n/keluar [harga] [#kategori] [item1, item2 dst]'
-        })
-      }
-    } else if (text.startsWith("/rekap")) {
+    } else if (text.startsWith("/trade")) {
       const stext = text.split(' ')
       stext.splice(0, 1);
+      
+      if (stext.length >= 6) {
+        const [symbol, direction, entry, exit, size, pnl, ...notes] = stext;
+        
+        Trades.insert({
+          _date,
+          Timestamp: timestamp,
+          Symbol: symbol.toUpperCase(),
+          Direction: direction.toLowerCase(),
+          Entry: parseFloat(entry),
+          Exit: parseFloat(exit),
+          Size: parseFloat(size),
+          PNL: parseFloat(pnl),
+          Notes: notes.join(' '),
+          TraderID: chatId,
+          TraderName: first_name
+        })
 
-      const oDateRange = Collection.generateDateRange(stext.join(' '))
-      const dataRange = oDateRange.dateRange
-      const sumType = oDateRange.sumType
-      const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-
-      if (dataRange.length > 0) {
-        let textToSend = "Rekapitulasi: \n"
-
-        for (let _date of dataRange) {
-          const pengeluaran = Debit.find(
-            {
-              _date: d => new Date(d) >= _date.from && new Date(d) < _date.to
-            }
-          )
-
-          const pemasukan = Credit.find(
-            {
-              _date: d => new Date(d) >= _date.from && new Date(d) < _date.to
-            }
-          )
-
-          let rekapMasuk = pemasukan.reduce((acc, item) => {
-            if (!acc[item.Kategori]) {
-              acc[item.Kategori] = 0;
-            }
-            acc[item.Kategori] += item.Nominal;
-            return acc;
-          }, {});
-
-          let rekapKeluar = pengeluaran.reduce((acc, item) => {
-            if (!acc[item.Kategori]) {
-              acc[item.Kategori] = 0;
-            }
-            acc[item.Kategori] += item.Nominal;
-            return acc;
-          }, {});
-
-          if (sumType == 'daily') {
-            let dateTo = new Date(_date.to)
-            dateTo.setDate(dateTo.getDate() - 1)
-            textToSend += "Pemasukan " + _date.from.toLocaleDateString() + ' s.d ' + dateTo.toLocaleDateString() + "\n"
-            textToSend += Object.keys(rekapMasuk).map((i) => `${i}: ${Number(rekapMasuk[i]).toLocaleString('id-ID')}`).join('\n') || '---'
-            textToSend += '\nTotal: ' + Object.values(rekapMasuk).reduce((acc, value) => acc + value, 0).toLocaleString('id-ID');
-            textToSend += "\n"
-            textToSend += "\n"
-            textToSend += "Pengeluaran " + _date.from.toLocaleDateString() + ' s.d ' + dateTo.toLocaleDateString() + "\n"
-            textToSend += Object.keys(rekapKeluar).map((i) => `${i}: ${Number(rekapKeluar[i]).toLocaleString('id-ID')}`).join('\n') || '---'
-            textToSend += '\nTotal: ' + Object.values(rekapKeluar).reduce((acc, value) => acc + value, 0).toLocaleString('id-ID');
-            textToSend += "\n"
-            textToSend += "\n"
-
-          }
-          else {
-            textToSend += "Pemasukan bulan " + monthNames[_date.from.getMonth()] + ' ' + _date.from.getFullYear() + "\n"
-
-            textToSend += Object.keys(rekapMasuk).map((i) => `${i}: ${Number(rekapMasuk[i]).toLocaleString('id-ID')}`).join('\n') || '---'
-            textToSend += '\nTotal: ' + Object.values(rekapMasuk).reduce((acc, value) => acc + value, 0).toLocaleString('id-ID');
-            textToSend += "\n"
-
-            textToSend += "\n"
-
-            textToSend += "Pengeluaran bulan " + monthNames[_date.from.getMonth()] + ' ' + _date.from.getFullYear() + "\n"
-
-            textToSend += Object.keys(rekapKeluar).map((i) => `${i}: ${Number(rekapKeluar[i]).toLocaleString('id-ID')}`).join('\n') || '---'
-            textToSend += '\nTotal: ' + Object.values(rekapKeluar).reduce((acc, value) => acc + value, 0).toLocaleString('id-ID');
-            textToSend += "\n"
-
-            textToSend += "\n"
-          }
-        }
+        updatePerformance(chatId, parseFloat(pnl))
 
         sendMessage({
           chat_id: chatId,
-          text: textToSend
+          text: 'Trade logged successfully.'
         })
-
       } else {
         sendMessage({
           chat_id: chatId,
-          text: 'Gagal. Pastikan sesuai format. \n/rekap [tanggal/bulan] [tanggal/bulan (opsional)]\nTanggal dan bulan berformat YYYY-MM-DD dan YYYY-MM\nContoh: \n/rekap 2024-01-01\n/rekap 2024-01-01 2024-01-10\n/rekap 2024-01\n/rekap 2024-01 2024-06'
+          text: 'Invalid format. Use: /trade [symbol] [direction] [entry] [exit] [size] [pnl] [notes]'
         })
       }
+    } else if (text.startsWith("/performance")) {
+      const stext = text.split(' ')
+      const timeframe = stext[1] || 'all'
+      
+      const performance = getPerformance(chatId, timeframe)
+      
+      sendMessage({
+        chat_id: chatId,
+        text: `Performance (${timeframe}):\n${performance}`
+      })
+    } else if (text.startsWith("/stats")) {
+      const stats = getTradeStats(chatId)
+      
+      sendMessage({
+        chat_id: chatId,
+        text: `Trading Statistics:\n${stats}`
+      })
+    } else if (text.startsWith("/help")) {
+      sendMessage({
+        chat_id: chatId,
+        text: "Trading Journal Bot Commands:\n\n" +
+              "/trade [symbol] [direction] [entry] [exit] [size] [pnl] [notes] - Log a trade\n" +
+              "/performance [timeframe] - View performance (daily, weekly, monthly, yearly, all)\n" +
+              "/stats - View overall trading statistics\n" +
+              "/help - Show this help message"
+      })
     }
   }
+}
+
+function updatePerformance(traderId, pnl) {
+  const today = new Date().toJSON().slice(0, 10);
+  const existingPerformance = Performance.findOne({ TraderID: traderId, Date: today });
+
+  if (existingPerformance) {
+    Performance.update(
+      { TraderID: traderId, Date: today },
+      { $inc: { DailyPNL: pnl } }
+    )
+  } else {
+    Performance.insert({
+      TraderID: traderId,
+      Date: today,
+      DailyPNL: pnl
+    })
+  }
+}
+
+function getPerformance(traderId, timeframe) {
+  const now = new Date();
+  let startDate;
+
+  switch (timeframe) {
+    case 'daily':
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
+    case 'weekly':
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+      break;
+    case 'monthly':
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      break;
+    case 'yearly':
+      startDate = new Date(now.getFullYear(), 0, 1);
+      break;
+    default:
+      startDate = new Date(0); // All time
+  }
+
+  const performances = Performance.find({
+    TraderID: traderId,
+    Date: d => new Date(d) >= startDate && new Date(d) <= now
+  });
+
+  const totalPNL = performances.reduce((sum, perf) => sum + perf.DailyPNL, 0);
+  const avgPNL = totalPNL / performances.length || 0;
+
+  return `Total P&L: $${totalPNL.toFixed(2)}\nAverage Daily P&L: $${avgPNL.toFixed(2)}`;
+}
+
+function getTradeStats(traderId) {
+  const trades = Trades.find({ TraderID: traderId });
+
+  const totalTrades = trades.length;
+  const winningTrades = trades.filter(t => t.PNL > 0).length;
+  const losingTrades = trades.filter(t => t.PNL < 0).length;
+  const winRate = (winningTrades / totalTrades * 100).toFixed(2);
+  
+  const totalPNL = trades.reduce((sum, trade) => sum + trade.PNL, 0);
+  const avgPNL = totalPNL / totalTrades || 0;
+
+  const profitFactor = trades.reduce((pf, trade) => {
+    pf.profit += trade.PNL > 0 ? trade.PNL : 0;
+    pf.loss += trade.PNL < 0 ? Math.abs(trade.PNL) : 0;
+    return pf;
+  }, { profit: 0, loss: 0 });
+
+  return `Total Trades: ${totalTrades}\n` +
+         `Winning Trades: ${winningTrades}\n` +
+         `Losing Trades: ${losingTrades}\n` +
+         `Win Rate: ${winRate}%\n` +
+         `Total P&L: $${totalPNL.toFixed(2)}\n` +
+         `Average P&L per Trade: $${avgPNL.toFixed(2)}\n` +
+         `Profit Factor: ${(profitFactor.profit / profitFactor.loss).toFixed(2)}`;
 }
 
 function sendMessage(postdata) {
